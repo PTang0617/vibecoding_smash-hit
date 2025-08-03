@@ -1,0 +1,16 @@
+/* style.css */
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+  font-family: sans-serif;
+}
+
+#ui {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: #fff;
+  font-size: 18px;
+  z-index: 10;
+}

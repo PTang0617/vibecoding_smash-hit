@@ -1,0 +1,27 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smash Hit Web Demo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="menu" style="position:absolute;top:0;left:0;width:100%;height:100%;background:#000;display:flex;justify-content:center;align-items:center;z-index:10;">
+   <button id="start-button" style="font-size:24px;padding:12px 24px;">開始遊戲</button>
+  </div>
+  <div id="ui">
+    🎯 Balls: <span id="ball-count">20</span> | 🏆 Score: <span id="score">0</span>
+  </div>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- 引入 Three.js、Cannon.js、OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
+  <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
+
+  <!-- 自己的主程式 -->
+  <script src="./main.js"></script>
+</body>
+</html>
