@@ -9,8 +9,11 @@ const shootBalls = [];
 let glassBlocks = [];
 let crystals = [];
 let crosshair;
+let speedMultiplier = 1;
+let lastSpeedIncreaseTime = Date.now();
 const soundHit = new Audio("hit.mp3");
 const soundCrystal = new Audio("crystal.mp3");
+const soundShoot = new Audio("shoot.mp3");
 
 init();
 
@@ -132,6 +135,8 @@ function shoot(event) {
 
   shootBalls.push({ mesh: ball, body });
 
+  const sound = new Audio("shoot.mp3");
+  sound.play();
   ballCount--;
   document.getElementById('ball-count').textContent = ballCount;
 }
@@ -220,7 +225,13 @@ function animate() {
   requestAnimationFrame(animate);
   world.step(1 / 60);
 
-  moveWorldForward(0.05);
+  const now = Date.now();
+  if (now - lastSpeedIncreaseTime > 10000) {
+    speedMultiplier += 0.1;
+    lastSpeedIncreaseTime = now;
+  }
+
+  moveWorldForward(0.05 * speedMultiplier); 
 
   shootBalls.forEach(({ mesh, body }) => {
     mesh.position.copy(body.position);
