@@ -1,4 +1,4 @@
-// Smash Hit Web - Mouse-Follow Crosshair (No Trajectory Preview)
+// Smash Hit Web - Game Over on Glass Collision
 
 let scene, camera, renderer, world;
 let ballCount = 20;
@@ -116,7 +116,6 @@ function shoot(event) {
   raycaster.setFromCamera(mouse, camera);
   const shootDir = raycaster.ray.direction.clone();
 
-  // 不再加入拋物線效果
   shootDir.normalize();
 
   const radius = 0.1;
@@ -254,6 +253,14 @@ function animate() {
         document.getElementById('ball-count').textContent = ballCount;
       }
     });
+  });
+
+  // 🔥 檢查玻璃是否撞到玩家相機位置，觸發 Game Over
+  glassBlocks.forEach((g) => {
+    const dist = g.mesh.position.distanceTo(camera.position);
+    if (dist < 0.4) {
+      endGame();
+    }
   });
 
   cleanupBehindCamera();
