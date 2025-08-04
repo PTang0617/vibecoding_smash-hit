@@ -12,6 +12,7 @@ let crosshair;
 let speedMultiplier = 1;
 let lastSpeedIncreaseTime = Date.now();
 let playerName = "匿名";
+let glassChance = 0.7; // 初始玻璃出現機率 70%
 const soundHit = new Audio("hit.mp3");
 const soundCrystal = new Audio("crystal.mp3");
 const soundShoot = new Audio("shoot.mp3");
@@ -19,6 +20,7 @@ let isMuted = false;
 const bgm = new Audio("bgm.mp3");
 bgm.loop = true; // 讓音樂循環播放
 bgm.volume = 0.4; // 可調整音量（0 ~ 1）
+const speedLines = [];
 
 // 初始化 Firebase
 const firebaseConfig = {
@@ -36,13 +38,32 @@ const db = firebase.firestore();
 init();
 
 function init() {
-  document.getElementById("start-button").onclick = () => {
+  document.getElementById("start-button").onclick = async () => {
+    const input = document.getElementById("player-name-input").value.trim();
+    const warning = document.getElementById("name-warning");
+
+    if (!input) {
+      warning.textContent = "請輸入名字";
+      return;
+    }
+
+    // 檢查是否重複
+    const snapshot = await db.collection("scores").where("name", "==", input).get();
+    if (!snapshot.empty) {
+      warning.textContent = "這個名字已經被使用，請換一個";
+      return;
+    }
+
+    // ✅ 合法，清除警告並開始遊戲
+    warning.textContent = "";
     document.getElementById("menu").style.display = "none";
+    playerName = input;
     gameStarted = true;
-    playerName = document.getElementById("player-name-input").value.trim() || "匿名";
     bgm.play();
     animate();
     setInterval(spawnRandomTarget, 800);
+    loadLeaderboard();
+    createSpeedLines();
   };
 
   scene = new THREE.Scene();
@@ -108,6 +129,7 @@ function init() {
 
     document.getElementById("mute-button").textContent = isMuted ? "🔇" : "🔊";
   };
+  updateLeaderboard();
 }
 
 function spawnRandomTarget() {
@@ -116,7 +138,7 @@ function spawnRandomTarget() {
   const z = camera.position.z - 30;
   const x = (Math.random() - 0.5) * 3;
   const y = 1.5;
-  const isGlass = Math.random() < 0.7;
+  const isGlass = Math.random() < glassChance;
 
   if (isGlass) {
     const size = 0.6;
@@ -248,11 +270,12 @@ function cleanupBehindCamera() {
   });
 }
 
-function endGame() {
+async function endGame() {
   isGameOver = true;
   bgm.pause(); // 停止播放
   document.getElementById("restart-menu").style.display = "flex";
-  updateLeaderboard();
+  await submitScore();      // 📝 加入自己分數
+  await loadLeaderboard();  // 📖 顯示更新後榜單
 }
 
 function animate() {
@@ -263,11 +286,23 @@ function animate() {
 
   const now = Date.now();
   if (now - lastSpeedIncreaseTime > 10000) {
-    speedMultiplier += 0.1;
+    speedMultiplier += 0.12;
+    glassChance = Math.min(glassChance + 0.05, 1);  // 每次增加 5%，最多到 1.0（100%）
     lastSpeedIncreaseTime = now;
   }
 
-  moveWorldForward(0.05 * speedMultiplier); 
+  moveWorldForward(0.05 * speedMultiplier);
+  
+  speedLines.forEach(line => {
+    line.position.z += 2 * speedMultiplier;
+
+    // 如果超過 camera.z（飛過玩家），重設到遠方
+    if (line.position.z > camera.position.z) {
+      line.position.x = (Math.random() - 0.5) * 200;
+      line.position.y = (Math.random() - 0.5) * 200;
+      line.position.z = -500;
+    }
+  });
 
   shootBalls.forEach(({ mesh, body }) => {
     mesh.position.copy(body.position);
@@ -357,23 +392,63 @@ function resetGame() {
 }
 
 
-async function updateLeaderboard() {
+async function submitScore() {
   const scoresRef = db.collection("scores");
 
-  // 新增當前分數
+  // 查詢是否已有相同名字紀錄
+  const snapshot = await scoresRef.where("name", "==", playerName).get();
+
+  if (!snapshot.empty) {
+    // 有紀錄，抓出最高的舊分數
+    const existing = snapshot.docs[0];
+    const oldScore = existing.data().score;
+
+    if (score <= oldScore) {
+      // 新分數比較低，不更新
+      console.log("新分數比舊分數低，不更新排行榜。");
+      return;
+    } else {
+      // 新分數比較高，刪掉舊紀錄再新增
+      await scoresRef.doc(existing.id).delete();
+    }
+  }
+
+  // 新增高分記錄
   await scoresRef.add({
     name: playerName,
     score: score,
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
   });
+}
 
-  // 取得分數前五名
+async function loadLeaderboard() {
+  const scoresRef = db.collection("scores");
   const snapshot = await scoresRef.orderBy("score", "desc").limit(5).get();
   const top5 = snapshot.docs.map(doc => doc.data());
 
-  // 顯示在畫面上
   const container = document.getElementById("leaderboard");
   container.innerHTML = `<h3>🏆 記分板</h3>` + top5.map((e, i) =>
     `${i+1}. ${e.name} - ${e.score}`
   ).join("<br>");
+}
+
+function createSpeedLines() {
+  const material = new THREE.LineBasicMaterial({ color: 0xffffff });
+
+  for (let i = 0; i < 200; i++) {
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, 5), // 長度 5
+    ]);
+
+    const line = new THREE.Line(geometry, material);
+
+    // 隨機位置，圍繞玩家視野分佈
+    line.position.x = (Math.random() - 0.5) * 200;
+    line.position.y = (Math.random() - 0.5) * 200;
+    line.position.z = Math.random() * -500;
+
+    scene.add(line);
+    speedLines.push(line);
+  }
 }
