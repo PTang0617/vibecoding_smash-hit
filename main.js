@@ -11,9 +11,27 @@ let crystals = [];
 let crosshair;
 let speedMultiplier = 1;
 let lastSpeedIncreaseTime = Date.now();
+let playerName = "匿名";
 const soundHit = new Audio("hit.mp3");
 const soundCrystal = new Audio("crystal.mp3");
 const soundShoot = new Audio("shoot.mp3");
+let isMuted = false;
+const bgm = new Audio("bgm.mp3");
+bgm.loop = true; // 讓音樂循環播放
+bgm.volume = 0.4; // 可調整音量（0 ~ 1）
+
+// 初始化 Firebase
+const firebaseConfig = {
+  apiKey: "AIzaSyARbdk870zyGYmnualAhPFfhGyRBcFUUdQ",
+  authDomain: "smashhitleaderboard.firebaseapp.com",
+  projectId: "smashhitleaderboard",
+  storageBucket: "smashhitleaderboard.firebasestorage.app",
+  messagingSenderId: "897316926520",
+  appId: "1:897316926520:web:2a051d41e1383c2241e2cd",
+  measurementId: "G-29DQ1B1BXC"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
 init();
 
@@ -21,6 +39,8 @@ function init() {
   document.getElementById("start-button").onclick = () => {
     document.getElementById("menu").style.display = "none";
     gameStarted = true;
+    playerName = document.getElementById("player-name-input").value.trim() || "匿名";
+    bgm.play();
     animate();
     setInterval(spawnRandomTarget, 800);
   };
@@ -63,8 +83,31 @@ function init() {
   });
 
   window.addEventListener("click", (e) => {
+    // 如果點的是按鈕或 UI，則不射擊
+    if (
+      e.target.tagName === "BUTTON" || 
+      e.target.closest("#menu") || 
+      e.target.closest("#restart-menu")
+    ) {
+      return;
+    }
+
     if (gameStarted && !isGameOver) shoot(e);
   });
+
+  document.getElementById("restart-button").onclick = () => {
+      resetGame(); // 改為重設，不再 reload
+    };
+
+    document.getElementById("mute-button").onclick = () => {
+    isMuted = !isMuted;
+    bgm.muted = isMuted;
+    soundHit.muted = isMuted;
+    soundCrystal.muted = isMuted;
+    soundShoot.muted = isMuted;
+
+    document.getElementById("mute-button").textContent = isMuted ? "🔇" : "🔊";
+  };
 }
 
 function spawnRandomTarget() {
@@ -135,8 +178,8 @@ function shoot(event) {
 
   shootBalls.push({ mesh: ball, body });
 
-  const sound = new Audio("shoot.mp3");
-  sound.play();
+  soundShoot.currentTime = 0;
+  soundShoot.play();
   ballCount--;
   document.getElementById('ball-count').textContent = ballCount;
 }
@@ -166,8 +209,8 @@ function explodeGlass(position) {
       world.removeBody(fragBody);
     }, 2000);
   }
-  const s = new Audio("hit.mp3");
-  s.play();
+  soundHit.currentTime = 0;
+  soundHit.play();
 }
 
 function moveWorldForward(speed) {
@@ -207,16 +250,9 @@ function cleanupBehindCamera() {
 
 function endGame() {
   isGameOver = true;
-  const message = document.createElement('div');
-  message.innerHTML = 'Game Over';
-  message.style.position = 'absolute';
-  message.style.top = '50%';
-  message.style.left = '50%';
-  message.style.transform = 'translate(-50%, -50%)';
-  message.style.color = '#fff';
-  message.style.fontSize = '48px';
-  message.style.zIndex = '100';
-  document.body.appendChild(message);
+  bgm.pause(); // 停止播放
+  document.getElementById("restart-menu").style.display = "flex";
+  updateLeaderboard();
 }
 
 function animate() {
@@ -255,8 +291,8 @@ function animate() {
       if (c.collected) return;
       const dist = mesh.position.distanceTo(c.mesh.position);
       if (dist < 0.4) {
-        const s = new Audio("crystal.mp3");
-        s.play();
+        soundCrystal.currentTime = 0;
+        soundCrystal.play();
         scene.remove(c.mesh);
         world.removeBody(c.body);
         c.collected = true;
@@ -276,4 +312,68 @@ function animate() {
 
   cleanupBehindCamera();
   renderer.render(scene, camera);
+}
+
+function resetGame() {
+  // 清除場上所有物件
+  shootBalls.forEach(b => {
+    scene.remove(b.mesh);
+    world.removeBody(b.body);
+  });
+  glassBlocks.forEach(g => {
+    scene.remove(g.mesh);
+    world.removeBody(g.body);
+  });
+  crystals.forEach(c => {
+    scene.remove(c.mesh);
+    world.removeBody(c.body);
+  });
+
+  shootBalls.length = 0;
+  glassBlocks.length = 0;
+  crystals.length = 0;
+
+  // 重設變數
+  ballCount = 20;
+  score = 0;
+  speedMultiplier = 1;
+  lastSpeedIncreaseTime = Date.now();
+  isGameOver = false;
+
+  document.getElementById("ball-count").textContent = ballCount;
+  document.getElementById("score").textContent = score;
+
+  // 隱藏 restart 畫面
+  document.getElementById("restart-menu").style.display = "none";
+
+  // 重設相機位置
+  camera.position.set(0, 1.5, 5);
+
+  // 重新啟動遊戲
+  gameStarted = true;
+  bgm.currentTime = 0;
+  bgm.play(); // 重新開始時播放音樂
+  animate();
+}
+
+
+async function updateLeaderboard() {
+  const scoresRef = db.collection("scores");
+
+  // 新增當前分數
+  await scoresRef.add({
+    name: playerName,
+    score: score,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  // 取得分數前五名
+  const snapshot = await scoresRef.orderBy("score", "desc").limit(5).get();
+  const top5 = snapshot.docs.map(doc => doc.data());
+
+  // 顯示在畫面上
+  const container = document.getElementById("leaderboard");
+  container.innerHTML = `<h3>🏆 記分板</h3>` + top5.map((e, i) =>
+    `${i+1}. ${e.name} - ${e.score}`
+  ).join("<br>");
 }

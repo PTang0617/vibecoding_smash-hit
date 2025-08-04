@@ -9,11 +9,27 @@
 </head>
 <body>
   <div id="menu" style="position:absolute;top:0;left:0;width:100%;height:100%;background:#000;display:flex;justify-content:center;align-items:center;z-index:10;">
-   <button id="start-button" style="font-size:24px;padding:12px 24px;">開始遊戲</button>
+    <div style="text-align:center; color:white;">
+    <div style="margin-bottom:10px; font-size:20px;">請輸入你的名字：</div>
+    <input id="player-name-input" type="text" placeholder="Your name" style="padding:8px; font-size:18px;" />
+    <br><br>
+    <button id="start-button" style="font-size:24px;padding:12px 24px;">開始遊戲</button>
   </div>
+  </div>
+
+  <div id="restart-menu">
+   <div style="color:white; font-size:48px; margin-bottom:24px;">Game Over</div>
+   <button id="restart-button" style="font-size:24px;padding:12px 24px;">重新開始</button>
+  </div>  
+
+  <button id="mute-button">🔊</button>
+
   <div id="ui">
+    
     🎯 Balls: <span id="ball-count">20</span> | 🏆 Score: <span id="score">0</span>
   </div>
+  <div style="margin-bottom:10px; font-size:20px;">請輸入你的名字：</div>
+  <div id="leaderboard"></div>
   <canvas id="gameCanvas"></canvas>
 
   <!-- 引入 Three.js、Cannon.js、OrbitControls -->
@@ -21,7 +37,13 @@
   <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
   <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
 
+  <!-- Firebase App (core) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <!-- Firestore -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
   <!-- 自己的主程式 -->
   <script src="./main.js"></script>
+
 </body>
 </html>
