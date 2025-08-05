@@ -10,9 +10,15 @@ body {
   position: absolute;
   top: 10px;
   left: 10px;
-  color: #fff;
-  font-size: 18px;
+  background: linear-gradient(90deg, rgba(0,0,0,0.6), rgba(0,0,0,0.2));
+  padding: 8px 16px;
+  border-radius: 12px;
+  box-shadow: 0 0 10px #00ffff55;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: bold;
   z-index: 10;
+  transition: transform 0.2s;
 }
 
 #restart-menu {
@@ -42,7 +48,8 @@ body {
 }
 
 #mute-button:hover {
-  background: rgba(255,255,255,0.2);
+  background: rgba(0,255,255,0.2);
+  box-shadow: 0 0 8px rgba(0,255,255,0.6);
 }
 
 #leaderboard {
@@ -50,13 +57,65 @@ body {
   top: 10px;
   right: 10px;
   color: white;
-  background: rgba(255,255,255,0.1);
-  padding: 10px 16px;
-  border-radius: 10px;
+  background: rgba(0,0,0,0.6);
+  padding: 14px 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 0 12px rgba(0,255,255,0.3);
   font-size: 16px;
   z-index: 10;
+  animation: fadeIn 0.5s ease-in-out;
 }
+
+@keyframes fadeIn {
+  0% { opacity: 0; transform: translateY(-10px);}
+  100% { opacity: 1; transform: translateY(0);}
+}
+
 #leaderboard h3 {
   margin: 0 0 8px 0;
   font-size: 18px;
+}
+
+.score-float {
+  position: absolute;
+  color: #00ffcc;
+  font-size: 24px;
+  font-weight: bold;
+  pointer-events: none;
+  animation: floatUp 0.8s ease-out forwards;
+  z-index: 99;
+}
+
+@keyframes floatUp {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-30px); }
+}
+
+
+#start-button, #restart-button {
+  background: linear-gradient(145deg, #00ccff, #007acc);
+  border: none;
+  color: white;
+  padding: 12px 24px;
+  font-size: 24px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 255, 255, 0.3);
+}
+#start-button:hover, #restart-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 18px rgba(0, 255, 255, 0.6);
+}
+
+#player-name-input {
+  padding: 10px;
+  font-size: 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.05);
+  color: white;
+  width: 220px;
+  text-align: center;
 }

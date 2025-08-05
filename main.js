@@ -1,11 +1,14 @@
 // Smash Hit Web - Game Over on Glass Collision
 
 let scene, camera, renderer, world;
+let physicsMaterial;
 let ballCount = 20;
 let score = 0;
 let isGameOver = false;
 let gameStarted = false;
 const shootBalls = [];
+const ballGhosts = []; // 用來存每顆殘影
+let ghostFrameCounter = 0;
 let glassBlocks = [];
 let crystals = [];
 let crosshair;
@@ -13,6 +16,7 @@ let speedMultiplier = 1;
 let lastSpeedIncreaseTime = Date.now();
 let playerName = "匿名";
 let glassChance = 0.7; // 初始玻璃出現機率 70%
+let spawnInterval = null;  // 新增這行
 const soundHit = new Audio("hit.mp3");
 const soundCrystal = new Audio("crystal.mp3");
 const soundShoot = new Audio("shoot.mp3");
@@ -61,7 +65,7 @@ function init() {
     gameStarted = true;
     bgm.play();
     animate();
-    setInterval(spawnRandomTarget, 800);
+    spawnInterval = setInterval(spawnRandomTarget, 800);
     loadLeaderboard();
     createSpeedLines();
   };
@@ -85,6 +89,23 @@ function init() {
   scene.add(ground);
 
   world = new CANNON.World();
+  physicsMaterial = new CANNON.Material("physics");
+
+  const contactMaterial = new CANNON.ContactMaterial(
+    physicsMaterial,
+    physicsMaterial,
+    {
+      friction: 0.2,      // 摩擦力（可調整）
+      restitution: 2    // 彈性（可調整）
+    }
+  );
+  const groundBody = new CANNON.Body({
+    mass: 0,
+    shape: new CANNON.Box(new CANNON.Vec3(5, 0.05, 2500)),  // 對應 Plane 的大小
+    material: physicsMaterial
+  });
+  groundBody.position.set(0, 0, 0);  // 不需要再旋轉或偏移
+  world.addBody(groundBody);
   world.gravity.set(0, -9.82, 0);
 
   // Dynamic Crosshair
@@ -155,8 +176,25 @@ function spawnRandomTarget() {
 
     glassBlocks.push({ mesh: glass, body });
   } else {
+    // 🎯 新增稀有水晶機率
+    const rand = Math.random();
+    let crystalColor, bonusType;
+
+    if (rand < 0.7) {
+      crystalColor = 0x44ccff; // 藍色：+3球
+      bonusType = "blue";
+    } else if (rand < 0.9) {
+      crystalColor = 0x00ff00; // 綠色：+5球
+      bonusType = "green";
+    } else {
+      crystalColor = 0xcc44ff; // 紫色：+1分+1球
+      bonusType = "purple";
+    }
+
     const crystalGeo = new THREE.ConeGeometry(0.2, 0.5, 4);
-    const crystalMat = new THREE.MeshStandardMaterial({ color: 0x44ccff });
+    const crystalMat = new THREE.MeshStandardMaterial({ color: crystalColor });
+    crystalMat.emissive = new THREE.Color(crystalColor); // 發光效果
+    crystalMat.emissiveIntensity = 0.5;
     const crystal = new THREE.Mesh(crystalGeo, crystalMat);
     crystal.position.set(x, y, z);
     scene.add(crystal);
@@ -166,9 +204,10 @@ function spawnRandomTarget() {
     body.position.set(x, y, z);
     world.addBody(body);
 
-    crystals.push({ mesh: crystal, body, collected: false });
+    crystals.push({ mesh: crystal, body, collected: false, bonusType });
   }
 }
+
 
 function shoot(event) {
   if (ballCount <= 0) {
@@ -186,19 +225,24 @@ function shoot(event) {
 
   shootDir.normalize();
 
-  const radius = 0.1;
+  const radius = 0.07;
   const ballGeo = new THREE.SphereGeometry(radius, 16, 16);
-  const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const ballMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0x888888,
+    emissiveIntensity: 0.2
+  });
   const ball = new THREE.Mesh(ballGeo, ballMat);
   ball.position.copy(camera.position);
   scene.add(ball);
 
-  const body = new CANNON.Body({ mass: 1, shape: new CANNON.Sphere(radius) });
+  const body = new CANNON.Body({ mass: 1, shape: new CANNON.Sphere(radius), material: physicsMaterial });
   body.position.copy(camera.position);
-  body.velocity.set(shootDir.x * 15, shootDir.y * 15, shootDir.z * 15);
+  const force = 25;
+  body.velocity.set(shootDir.x * force, shootDir.y * (force+5), shootDir.z * force);
   world.addBody(body);
 
-  shootBalls.push({ mesh: ball, body });
+  shootBalls.push({ mesh: ball, body, hasHitGlass: false, lastGhostPos: ball.position.clone() });
 
   soundShoot.currentTime = 0;
   soundShoot.play();
@@ -206,34 +250,91 @@ function shoot(event) {
   document.getElementById('ball-count').textContent = ballCount;
 }
 
+function showFloatingScore(position3D, text = "+1") {
+  const vector = position3D.clone().project(camera);
+  const x = (vector.x + 1) / 2 * window.innerWidth;
+  const y = (-vector.y + 1) / 2 * window.innerHeight;
+
+  const div = document.createElement("div");
+  div.className = "score-float";
+  div.style.left = `${x}px`;
+  div.style.top = `${y}px`;
+  div.textContent = text;
+
+  document.body.appendChild(div);
+
+  setTimeout(() => {
+    div.remove();
+  }, 800);
+}
+
+
 function explodeGlass(position) {
-  for (let i = 0; i < 6; i++) {
-    const fragGeo = new THREE.BoxGeometry(0.15, 0.15, 0.02);
-    const fragMat = new THREE.MeshStandardMaterial({ color: 0x88ffff, transparent: true, opacity: 0.8 });
+  const fragCount = 8;  // 增加碎片數量
+
+  for (let i = 0; i < fragCount; i++) {
+    // ✅ 小碎片、不規則形狀
+    const w = Math.random() * 0.1 + 0.05;
+    const h = Math.random() * 0.1 + 0.05;
+    const d = Math.random() * 0.01 + 0.005;
+
+    const fragGeo = new THREE.BoxGeometry(w, h, d);
+    const fragMat = new THREE.MeshStandardMaterial({
+      color: 0x88ffff,
+      transparent: true,
+      opacity: 0.6,
+      roughness: 0.1,
+      metalness: 0.3,
+      emissive: new THREE.Color(0x88ffff),
+      emissiveIntensity: 0.1
+    });
+
     const frag = new THREE.Mesh(fragGeo, fragMat);
-    frag.position.copy(position);
+
+    // ✅ 加一些位移偏移讓更自然
+    frag.position.set(
+      position.x + (Math.random() - 0.5) * 0.3,
+      position.y + (Math.random() - 0.5) * 0.3,
+      position.z + (Math.random() - 0.5) * 0.3
+    );
+
+    frag.rotation.set(
+      Math.random() * Math.PI,
+      Math.random() * Math.PI,
+      Math.random() * Math.PI
+    );
+
     scene.add(frag);
 
-    const fragBody = new CANNON.Body({ mass: 0.1 });
-    fragBody.addShape(new CANNON.Box(new CANNON.Vec3(0.075, 0.075, 0.01)));
-    fragBody.position.copy(position);
+    const fragBody = new CANNON.Body({ mass: 0.05 }); // 輕一點，像玻璃片
+    fragBody.addShape(new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)));
+    fragBody.position.copy(frag.position);
     fragBody.velocity.set(
-      (Math.random() - 0.5) * 4,
-      (Math.random() - 0.5) * 4,
-      (Math.random() - 0.5) * 4
+      (Math.random() - 0.5) * 6,
+      (Math.random() - 0.2) * 4 + 2,  // 稍微往上噴
+      (Math.random() - 0.5) * 6
     );
+
+    // ✅ 增加旋轉
+    fragBody.angularVelocity.set(
+      Math.random() * 10 - 5,
+      Math.random() * 10 - 5,
+      Math.random() * 10 - 5
+    );
+
     world.addBody(fragBody);
 
-    shootBalls.push({ mesh: frag, body: fragBody });
-
-    setTimeout(() => {
-      scene.remove(frag);
-      world.removeBody(fragBody);
-    }, 2000);
+    // ❗ 讓碎片跟著物理位置更新
+    const fragObj = { mesh: frag, body: fragBody, createdAt: Date.now() };
+    shootBalls.push(fragObj);  // 加入 shootBalls 以自動更新位置（但不要檢查碰撞）
   }
+
   soundHit.currentTime = 0;
   soundHit.play();
+  showFloatingScore(position);
 }
+
+
 
 function moveWorldForward(speed) {
   glassBlocks.forEach(g => {
@@ -287,7 +388,7 @@ function animate() {
   const now = Date.now();
   if (now - lastSpeedIncreaseTime > 10000) {
     speedMultiplier += 0.12;
-    glassChance = Math.min(glassChance + 0.05, 1);  // 每次增加 5%，最多到 1.0（100%）
+    glassChance = Math.min(glassChance + 0.05, 0.8);  // 每次增加 5%，最多到 1.0（100%）
     lastSpeedIncreaseTime = now;
   }
 
@@ -304,37 +405,97 @@ function animate() {
     }
   });
 
-  shootBalls.forEach(({ mesh, body }) => {
+  shootBalls.forEach((ball) => {
+    const { mesh, body, hasHitGlass } = ball;
+
     mesh.position.copy(body.position);
     mesh.quaternion.copy(body.quaternion);
+
+    if (ball.lastGhostPos) {
+      const dist = mesh.position.distanceTo(ball.lastGhostPos);
+      if (dist > 0.5) {  // 每移動超過 0.7 才畫一次殘影
+        const ghostGeo = new THREE.SphereGeometry(0.1, 8, 8);
+        const ghostMat = new THREE.MeshStandardMaterial({
+          color: 0x44ccff,
+          transparent: true,
+          opacity: 0.5,
+          emissive: 0x44ccff,
+          emissiveIntensity: 0.6
+        });
+        const ghost = new THREE.Mesh(ghostGeo, ghostMat);
+        ghost.position.copy(body.position);
+        scene.add(ghost);
+        ballGhosts.push({ mesh: ghost, createdAt: Date.now() });
+        ball.lastGhostPos.copy(mesh.position);  // 更新位置
+      }
+    }
   });
 
-  shootBalls.forEach(({ mesh, body }, i) => {
+  shootBalls.forEach((ball) => {
+    const { mesh, body, hasHitGlass } = ball;
+
+    // 撞玻璃
     glassBlocks.forEach((g, j) => {
       const dist = mesh.position.distanceTo(g.mesh.position);
       if (dist < 0.5) {
-        explodeGlass(g.mesh.position);
         scene.remove(g.mesh);
         world.removeBody(g.body);
         glassBlocks.splice(j, 1);
+
+        explodeGlass(g.mesh.position);
+
         score++;
-        document.getElementById('score').textContent = score;
+        document.getElementById("score").textContent = score;
+        soundHit.currentTime = 0;
+        soundHit.play();
+        showFloatingScore(g.mesh.position);
+        
       }
     });
 
+    // 撞水晶（原本程式的）
     crystals.forEach((c) => {
       if (c.collected) return;
       const dist = mesh.position.distanceTo(c.mesh.position);
       if (dist < 0.4) {
         soundCrystal.currentTime = 0;
         soundCrystal.play();
+        showCrystalHitEffect(c.mesh.position, c.mesh.material.color.getHex());
         scene.remove(c.mesh);
         world.removeBody(c.body);
         c.collected = true;
-        ballCount += 3;
-        document.getElementById('ball-count').textContent = ballCount;
+
+        if (c.bonusType === "blue") {
+          ballCount += 2;
+          showFloatingScore(c.mesh.position, "+2 Balls");
+        } else if (c.bonusType === "green") {
+          ballCount += 4;
+          showFloatingScore(c.mesh.position, "+4 Balls");
+        } else if (c.bonusType === "purple") {
+          ballCount += 10;
+          score += 1;
+          showFloatingScore(c.mesh.position, "+10 Ball +1 Score");
+          document.getElementById("score").textContent = score;
+        }
+
+        document.getElementById("ball-count").textContent = ballCount;
       }
     });
+  });
+
+  // 更新殘影
+  ballGhosts.forEach((ghost, i) => {
+    const age = Date.now() - ghost.createdAt;
+    const life = 600; // 存活 600ms
+
+    if (age > life) {
+      scene.remove(ghost.mesh);
+      ballGhosts.splice(i, 1);
+    } else {
+      const t = age / life;
+      ghost.mesh.material.opacity = 1 - t;
+      ghost.mesh.scale.setScalar(1 - t);
+    }
   });
 
   // 🔥 檢查玻璃是否撞到玩家相機位置，觸發 Game Over
@@ -350,6 +511,7 @@ function animate() {
 }
 
 function resetGame() {
+  if (spawnInterval) clearInterval(spawnInterval);
   // 清除場上所有物件
   shootBalls.forEach(b => {
     scene.remove(b.mesh);
@@ -373,6 +535,7 @@ function resetGame() {
   score = 0;
   speedMultiplier = 1;
   lastSpeedIncreaseTime = Date.now();
+  glassChance = 0.7;
   isGameOver = false;
 
   document.getElementById("ball-count").textContent = ballCount;
@@ -388,6 +551,7 @@ function resetGame() {
   gameStarted = true;
   bgm.currentTime = 0;
   bgm.play(); // 重新開始時播放音樂
+  spawnInterval = setInterval(spawnRandomTarget, 800);
   animate();
 }
 
@@ -450,5 +614,68 @@ function createSpeedLines() {
 
     scene.add(line);
     speedLines.push(line);
+  }
+}
+
+function showCrystalHitEffect(position, colorHex = 0x00ffff) {
+  // 💫 光圈（爆閃縮放後淡出）
+  const ringGeo = new THREE.RingGeometry(0.1, 0.3, 32);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: colorHex,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.8
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.position.copy(position);
+  ring.lookAt(camera.position);
+  scene.add(ring);
+
+  const startTime = Date.now();
+  const duration = 500;
+
+  const animateRing = () => {
+    const t = (Date.now() - startTime) / duration;
+    if (t > 1) {
+      scene.remove(ring);
+      return;
+    }
+    ring.scale.setScalar(1 + t * 2);
+    ring.material.opacity = 0.8 * (1 - t);
+    requestAnimationFrame(animateRing);
+  };
+  animateRing();
+
+  // 🧩 粒子爆炸
+  for (let i = 0; i < 15; i++) {
+    const dotGeo = new THREE.SphereGeometry(0.02, 6, 6);
+    const dotMat = new THREE.MeshBasicMaterial({
+      color: colorHex,
+      transparent: true,
+      opacity: 1.0
+    });
+    const dot = new THREE.Mesh(dotGeo, dotMat);
+    dot.position.copy(position);
+    scene.add(dot);
+
+    const dir = new THREE.Vector3(
+      (Math.random() - 0.5) * 2,
+      (Math.random() - 0.5) * 2,
+      (Math.random() - 0.5) * 2
+    );
+    const start = Date.now();
+    const life = 600;
+
+    const animateDot = () => {
+      const t = (Date.now() - start) / life;
+      if (t > 1) {
+        scene.remove(dot);
+        return;
+      }
+      dot.position.addScaledVector(dir, 0.05);
+      dot.material.opacity = 1 - t;
+      requestAnimationFrame(animateDot);
+    };
+    animateDot();
   }
 }
