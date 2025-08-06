@@ -12,6 +12,8 @@ let ghostFrameCounter = 0;
 let glassBlocks = [];
 let crystals = [];
 let crosshair;
+let isPaused = false;
+let pauseOverlay = null;
 let speedMultiplier = 1;
 let lastSpeedIncreaseTime = Date.now();
 let playerName = "匿名";
@@ -63,6 +65,15 @@ function init() {
     document.getElementById("menu").style.display = "none";
     playerName = input;
     gameStarted = true;
+
+    // 顯示「按下空白鍵可暫停」提示
+    const hint = document.getElementById("center-hint");
+    hint.classList.add("show");
+
+    setTimeout(() => {
+      hint.classList.remove("show");
+    }, 2000);
+
     bgm.play();
     animate();
     spawnInterval = setInterval(spawnRandomTarget, 800);
@@ -124,6 +135,12 @@ function init() {
     crosshair.style.top = `${e.clientY - 5}px`;
   });
 
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space" && gameStarted && !isGameOver) {
+      togglePause();
+    }
+  });
+
   window.addEventListener("click", (e) => {
     // 如果點的是按鈕或 UI，則不射擊
     if (
@@ -160,11 +177,16 @@ function spawnRandomTarget() {
   const x = (Math.random() - 0.5) * 3;
   const y = 1.5;
   const isGlass = Math.random() < glassChance;
+  const isMovingGlass = isGlass && speedMultiplier > 1.5 && Math.random() < 0.2; // 速度大於 2 且有 30% 機率是會移動的
 
   if (isGlass) {
     const size = 0.6;
     const glassGeo = new THREE.BoxGeometry(size, size, 0.1);
-    const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ffff, transparent: true, opacity: 0.7 });
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: isMovingGlass ? 0xff8888 : 0x88ffff,  // 紅色代表會動的玻璃
+      transparent: true,
+      opacity: 0.7
+    });
     const glass = new THREE.Mesh(glassGeo, glassMat);
     glass.position.set(x, y, z);
     scene.add(glass);
@@ -174,7 +196,14 @@ function spawnRandomTarget() {
     body.position.set(x, y, z);
     world.addBody(body);
 
-    glassBlocks.push({ mesh: glass, body });
+    glassBlocks.push({
+      mesh: glass,
+      body,
+      isMoving: isMovingGlass,
+      moveOffset: Math.random() * Math.PI * 2, // 起始相位
+      moveAmplitude: 1 + Math.random(),       // 振幅 1~2
+      moveSpeed: 1 + Math.random() * 2        // 速度 1~3
+    });
   } else {
     // 🎯 新增稀有水晶機率
     const rand = Math.random();
@@ -380,7 +409,7 @@ async function endGame() {
 }
 
 function animate() {
-  if (!gameStarted || isGameOver) return;
+  if (!gameStarted || isGameOver || isPaused) return;
 
   requestAnimationFrame(animate);
   world.step(1 / 60);
@@ -391,6 +420,16 @@ function animate() {
     glassChance = Math.min(glassChance + 0.05, 0.8);  // 每次增加 5%，最多到 1.0（100%）
     lastSpeedIncreaseTime = now;
   }
+
+  const timeSec = Date.now() * 0.001;  // 以秒為單位
+
+  glassBlocks.forEach(g => {
+    if (g.isMoving) {
+      const offsetX = Math.sin(timeSec * g.moveSpeed + g.moveOffset) * g.moveAmplitude;
+      g.mesh.position.x = offsetX;
+      g.body.position.x = offsetX;
+    }
+  });
 
   moveWorldForward(0.05 * speedMultiplier);
   
@@ -444,12 +483,13 @@ function animate() {
 
         explodeGlass(g.mesh.position);
 
-        score++;
+        const gain = g.isMoving ? 5 : 1;
+        score += gain;
         document.getElementById("score").textContent = score;
+
         soundHit.currentTime = 0;
         soundHit.play();
-        showFloatingScore(g.mesh.position);
-        
+        showFloatingScore(g.mesh.position, `+${gain}`);
       }
     });
 
@@ -505,8 +545,10 @@ function animate() {
       endGame();
     }
   });
-
+  cleanupShootBalls();
   cleanupBehindCamera();
+
+  
   renderer.render(scene, camera);
 }
 
@@ -677,5 +719,47 @@ function showCrystalHitEffect(position, colorHex = 0x00ffff) {
       requestAnimationFrame(animateDot);
     };
     animateDot();
+  }
+}
+
+
+function cleanupShootBalls() {
+  const camZ = camera.position.z;
+
+  for (let i = shootBalls.length - 1; i >= 0; i--) {
+    const b = shootBalls[i];
+    const pos = b.mesh.position;
+    const tooFar = pos.z > camZ + 30 || pos.z < camZ - 150;
+    const tooLow = pos.y < -15;
+
+    let tooOld = false;
+    if (b.createdAt !== undefined) {
+      tooOld = Date.now() - b.createdAt > 2500; // 玻璃碎片壽命 2.5 秒
+    }
+
+    if (tooFar || tooLow || tooOld) {
+      scene.remove(b.mesh);
+      world.removeBody(b.body);
+      shootBalls.splice(i, 1);
+    }
+  }
+}
+
+function togglePause() {
+  isPaused = !isPaused;
+
+  if (isPaused) {
+    // 顯示暫停圖示
+    pauseOverlay = document.createElement("div");
+    pauseOverlay.id = "pause-overlay";
+    pauseOverlay.textContent = "⏸ 暫停";
+    document.body.appendChild(pauseOverlay);
+  } else {
+    // 恢復遊戲，移除 overlay
+    if (pauseOverlay) {
+      pauseOverlay.remove();
+      pauseOverlay = null;
+    }
+    animate();  // 繼續執行 requestAnimationFrame
   }
 }
