@@ -153,3 +153,22 @@ body {
 #center-hint.show {
   opacity: 1;
 }
+
+#speed-display {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 32px;
+  font-weight: bold;
+  color: #00ffcc;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 8px 20px;
+  border-radius: 12px;
+  box-shadow: 0 0 10px #00ffcc55;
+  z-index: 30;
+  font-family: 'Segoe UI', sans-serif;
+  transition: opacity 0.3s;
+}
+
+
