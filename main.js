@@ -31,25 +31,38 @@ let currentSpeedDisplay = 0; // 顯示用（平滑過的）速度值（km/h）
 const LEVELS = [
   {
     name: "Level 1",
-    // 第一關：基本的水晶與玻璃（沒有左右移動）
     glassChance: 0.7,
     movingGlassChance: 0.0,
-    spawnIntervalMs: 800
+    spawnIntervalMs: 800,
+    movingGlassAxis: "x",          // 佔位，第一關不會用到
+    movingGlassColor: 0xff8888
   },
   {
     name: "Level 2",
-    // 第二關：加入紅色左右移動玻璃
     glassChance: 0.75,
-    movingGlassChance: 0.35, // 有 35% 機率生成會左右移動的玻璃
-    spawnIntervalMs: 700
+    movingGlassChance: 0.35,       // 紅色左右移動玻璃
+    spawnIntervalMs: 700,
+    movingGlassAxis: "x",
+    movingGlassColor: 0xff4444
   },
-  // 之後要擴充只要往陣列 push 新關卡物件即可
+  {
+    name: "Level 3",
+    // 第三關：上下移動的藍色「擋路玻璃」
+    glassChance: 0.75,
+    movingGlassChance: 0.18,      // 出現頻率 ↓（比第二關低）
+    spawnIntervalMs: 750,
+    movingAxis: "y",              // ★ 指定改為上下移動
+    barrierWidth: 8.8,            // ★ 幾乎等於地面寬(10)的通道寬
+    barrierHeight: 2.0,           // ★ 足夠高度；最低點貼地就完全擋住
+    minY: 1.0,                    // ★ center 的最小值（= 高度/2）=> 下緣 y=0
+    maxY: 4.0,                    // ★ 想要上下浮動上緣，但仍必須打碎才能過
+    barrierColor: 0x4488ff        // ★ 藍色
+  }
 ];
 
 let currentLevelIndex = 0;
 let levelStartTime = 0;      // 啟用該關的起始時間戳
-const LEVEL_DURATIONS = [30]; // 每關持續秒數：第一關 30 秒後進第二關（之後可加長/每關一個值）
-let transitionGlass = null;      // 厚玻璃物件
+const LEVEL_DURATIONS = [30, 35];  // L1 30 秒→轉場→L2；L2 35 秒→轉場→L3let transitionGlass = null;      // 厚玻璃物件
 let transitionGlassHP = 0;       // 血量
 let isTransitioningLevel = false; // 是否正在過關
 let camShakeUntil = 0;
@@ -204,6 +217,7 @@ function init() {
 function spawnRandomTarget() {
   if (!gameStarted || isGameOver) return;
 
+  const thickness = 0.16; // 稍微厚一點，手感更好
   const z = camera.position.z - 30;
   const x = (Math.random() - 0.5) * 3;
   const y = 1.5;
@@ -212,30 +226,85 @@ function spawnRandomTarget() {
   const isMovingGlass = isGlass && Math.random() < L.movingGlassChance; // ⭐ 由關卡控制
 
   if (isGlass) {
-    const size = 0.6;
-    const glassGeo = new THREE.BoxGeometry(size, size, 0.1);
-    const glassMat = new THREE.MeshStandardMaterial({
-      color: isMovingGlass ? 0xff8888 : 0x88ffff,  // 紅色代表會動的玻璃
-      transparent: true,
-      opacity: 0.7
-    });
-    const glass = new THREE.Mesh(glassGeo, glassMat);
-    glass.position.set(x, y, z);
-    scene.add(glass);
+    const L = LEVELS[currentLevelIndex];
+    const isMovingGlass = Math.random() < L.movingGlassChance;
 
-    const body = new CANNON.Body({ mass: 0 });
-    body.addShape(new CANNON.Box(new CANNON.Vec3(size/2, size/2, 0.05)));
-    body.position.set(x, y, z);
-    world.addBody(body);
+    // ★ 第三關：改生成「大型藍色上下移動門板」
+    if (L.movingAxis === "y" && isMovingGlass) {
+      const width  = L.barrierWidth ?? 9.2;
+      const height = L.barrierHeight ?? 2.0;
+      const thickness = 0.12;
 
-    glassBlocks.push({
+      const z = camera.position.z - 30;
+      const x = 0; // 置中才能確保擋路
+      // 讓中心最低到 height/2（=> 下緣 = 0，剛好貼地）
+      const minY = L.minY ?? (height * 0.5);
+      const maxY = L.maxY ?? 3.0;
+      const baseY = (minY + maxY) * 0.5; // 以區間中點為中心擺動
+
+      const geo = new THREE.BoxGeometry(width, height, thickness);
+      const mat = new THREE.MeshStandardMaterial({
+        color: L.barrierColor ?? 0x4488ff,
+        transparent: true,
+        opacity: 0.8,
+        emissive: new THREE.Color(L.barrierColor ?? 0x4488ff),
+        emissiveIntensity: 0.3
+      });
+      const glass = new THREE.Mesh(geo, mat);
+      glass.position.set(x, baseY, z);
+      scene.add(glass);
+
+      const body = new CANNON.Body({ mass: 0 });
+      body.addShape(new CANNON.Box(new CANNON.Vec3(width/2, height/2, thickness/2)));
+      body.position.set(x, baseY, z);
+      world.addBody(body);
+
+      glassBlocks.push({
       mesh: glass,
       body,
-      isMoving: isMovingGlass,
-      moveOffset: Math.random() * Math.PI * 2, // 起始相位
-      moveAmplitude: 1 + Math.random(),       // 振幅 1~2
-      moveSpeed: 1 + Math.random() * 2        // 速度 1~3
+      isMoving: true,
+      moveAxis: "y",
+      baseY, minY, maxY,
+      moveOffset: Math.random() * Math.PI * 2,
+      moveAmplitude: 0.7,
+      moveSpeed: 1 + Math.random() * 2,
+      // ★ 新增：提供尺寸給碰撞用 & 碎裂顏色
+      dims: { width, height, thickness },
+      shardColor: L.barrierColor ?? 0x4488ff,
+      isBarrier: true // ★ 新增：標記這是藍色門板
     });
+    } else {
+      // 其餘關卡或第三關沒抽中移動 → 用原本的小塊玻璃（含紅色左右移動的第二關）
+      const size = 0.6;
+      const z = camera.position.z - 30;
+      const x = (Math.random() - 0.5) * 3;
+      const y = 1.5;
+
+      const geo = new THREE.BoxGeometry(size, size, 0.1);
+      const mat = new THREE.MeshStandardMaterial({
+        color: isMovingGlass ? 0xff8888 : 0x88ffff, // 第二關紅色移動、其餘靜態
+        transparent: true,
+        opacity: 0.7
+      });
+      const glass = new THREE.Mesh(geo, mat);
+      glass.position.set(x, y, z);
+      scene.add(glass);
+
+      const body = new CANNON.Body({ mass: 0 });
+      body.addShape(new CANNON.Box(new CANNON.Vec3(size/2, size/2, 0.05)));
+      body.position.set(x, y, z);
+      world.addBody(body);
+
+      glassBlocks.push({
+        mesh: glass,
+        body,
+        isMoving: isMovingGlass && (L.movingAxis !== "y"), // 只有非第三關才走左右
+        moveAxis: "x",
+        moveOffset: Math.random() * Math.PI * 2,
+        moveAmplitude: 1 + Math.random(),
+        moveSpeed: 1 + Math.random() * 2
+      });
+    }
   } else {
     // 🎯 新增稀有水晶機率
     const rand = Math.random();
@@ -330,7 +399,7 @@ function showFloatingScore(position3D, text = "+1") {
 }
 
 
-function explodeGlass(position) {
+function explodeGlass(position, colorHex = 0x88ffff) {
   const fragCount = 8;  // 增加碎片數量
 
   for (let i = 0; i < fragCount; i++) {
@@ -341,12 +410,12 @@ function explodeGlass(position) {
 
     const fragGeo = new THREE.BoxGeometry(w, h, d);
     const fragMat = new THREE.MeshStandardMaterial({
-      color: 0x88ffff,
+      color: colorHex,
       transparent: true,
       opacity: 0.6,
       roughness: 0.1,
       metalness: 0.3,
-      emissive: new THREE.Color(0x88ffff),
+      emissive: new THREE.Color(colorHex),
       emissiveIntensity: 0.1
     });
 
@@ -493,9 +562,17 @@ function animate() {
 
   glassBlocks.forEach(g => {
     if (g.isMoving) {
-      const offsetX = Math.sin(timeSec * g.moveSpeed + g.moveOffset) * g.moveAmplitude;
-      g.mesh.position.x = offsetX;
-      g.body.position.x = offsetX;
+      const off = Math.sin(timeSec * g.moveSpeed + g.moveOffset) * g.moveAmplitude;
+      if (g.moveAxis === "y") {
+        // 中心 y 在 [minY, maxY] 之間擺動；確保下緣不會穿地
+        const cy = THREE.MathUtils.clamp((g.baseY ?? 1.0) + off, g.minY ?? 1.0, g.maxY ?? 3.0);
+        g.mesh.position.y = cy;
+        g.body.position.y = cy;
+      } else {
+        // 預設沿 X（關卡 2）
+        g.mesh.position.x = off;
+        g.body.position.x = off;
+      }
     }
   });
 
@@ -595,13 +672,34 @@ function animate() {
 
     // 撞玻璃
     glassBlocks.forEach((g, j) => {
-      const dist = mesh.position.distanceTo(g.mesh.position);
-      if (dist < 0.5) {
+      const ballPos = mesh.position;
+      const radius = 0.07; // 球半徑
+      let hit = false;
+
+      if (g.dims) {
+        // 門板：用球 vs 盒子判定
+        const { width, height, thickness } = g.dims;
+        const dx = Math.abs(ballPos.x - g.mesh.position.x);
+        const dy = Math.abs(ballPos.y - g.mesh.position.y);
+        const dz = Math.abs(ballPos.z - g.mesh.position.z);
+        hit = (dx <= width/2 + radius) &&
+              (dy <= height/2 + radius) &&
+              (dz <= thickness/2 + radius);
+      } else {
+        // 小玻璃：沿用原本半徑距離法
+        hit = ballPos.distanceTo(g.mesh.position) < 0.5;
+      }
+
+      if (hit) {
+        // 先把視覺做起來
+        if (g.isBarrier) {
+          explodeBarrierGlass(g.mesh.position, g.shardColor || 0x4488ff); // ★ 門板專用超明顯爆裂
+        } else {
+          explodeGlass(g.mesh.position, g.shardColor || 0x88ffff);
+        }
         scene.remove(g.mesh);
         world.removeBody(g.body);
         glassBlocks.splice(j, 1);
-
-        explodeGlass(g.mesh.position);
 
         const gain = g.isMoving ? 5 : 1;
         score += gain;
@@ -1269,3 +1367,112 @@ function explodeGateGlass(position, color = 0xffcc33) {
   // 可選：補幾個普通玻璃碎片
   if (typeof explodeGlass === 'function') explodeGlass(position);
 }
+
+
+function explodeBarrierGlass(position, colorHex = 0x4488ff) {
+  // A) 大塊碎片（存在感）
+  const bigCount = 28; // 比普通多
+  for (let i = 0; i < bigCount; i++) {
+    const w = Math.random() * 0.35 + 0.15; // 更大
+    const h = Math.random() * 0.35 + 0.12;
+    const d = Math.random() * 0.06 + 0.02;
+
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const mat = new THREE.MeshStandardMaterial({
+      color: colorHex,
+      transparent: true,
+      opacity: 0.9,
+      roughness: 0.08,
+      metalness: 0.35,
+      emissive: new THREE.Color(colorHex),
+      emissiveIntensity: 0.5 // ★ 更亮
+    });
+    const frag = new THREE.Mesh(geo, mat);
+    // 讓碎片從命中點附近爆開
+    frag.position.set(
+      position.x + (Math.random() - 0.5) * 0.3,
+      position.y + (Math.random() - 0.5) * 0.3,
+      position.z + (Math.random() - 0.5) * 0.1
+    );
+    frag.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+    scene.add(frag);
+
+    const body = new CANNON.Body({ mass: 0.12 });
+    body.addShape(new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)));
+    body.position.copy(frag.position);
+
+    // 噴得更快、略偏向玩家（增加畫面冲擊）
+    const towardCam = new THREE.Vector3().subVectors(camera.position, position).normalize();
+    const rand = new THREE.Vector3(
+      (Math.random() - 0.5) * 2,
+      (Math.random() - 0.2) * 2,
+      (Math.random() - 0.5) * 2
+    );
+    const v = towardCam.multiplyScalar(6).add(rand.multiplyScalar(4));
+    body.velocity.set(v.x, v.y, v.z);
+
+    body.angularVelocity.set(
+      Math.random()*12 - 6,
+      Math.random()*12 - 6,
+      Math.random()*12 - 6
+    );
+    world.addBody(body);
+
+    shootBalls.push({
+      mesh: frag, body,
+      createdAt: Date.now(),
+      isDebris: true,
+      hitGate: true
+    });
+  }
+
+  // B) 藍色玻璃粉塵/火花（亮點粒子）
+  for (let i = 0; i < 24; i++) {
+    const dotGeo = new THREE.SphereGeometry(0.03, 6, 6);
+    const dotMat = new THREE.MeshBasicMaterial({
+      color: colorHex,
+      transparent: true,
+      opacity: 1
+    });
+    const dot = new THREE.Mesh(dotGeo, dotMat);
+    dot.position.copy(position);
+    scene.add(dot);
+
+    const dir = new THREE.Vector3(
+      (Math.random() - 0.5) * 3,
+      Math.random() * 2 + 0.2,
+      (Math.random() - 0.5) * 3
+    );
+    const start = Date.now(), life = 700 + Math.random() * 300;
+    (function animateDot(){
+      const t = (Date.now() - start) / life;
+      if (t > 1) { scene.remove(dot); return; }
+      dot.position.addScaledVector(dir, 0.08);
+      dot.material.opacity = 1 - t;
+      requestAnimationFrame(animateDot);
+    })();
+  }
+
+  // C) 慢動作 + 螢幕閃光 + 輕微鏡頭震動
+  flashWhite(140);
+  camShakeUntil = Date.now() + 180;
+  slowMo(220, 0.45); // 0.45x 速度 220ms
+
+  // D) 再加一個光圈（共用你打水晶的特效）
+  showCrystalHitEffect(position, colorHex);
+
+  // 音效
+  soundHit.currentTime = 0;
+  soundHit.play();
+}
+
+function slowMo(ms = 200, factor = 0.5) {
+  const prev = speedMultiplier;
+  // 降低世界推進速度一小段時間
+  speedMultiplier = Math.max(0.1, prev * factor);
+  setTimeout(() => {
+    speedMultiplier = prev;
+  }, ms);
+}
+
+
