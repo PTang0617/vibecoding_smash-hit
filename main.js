@@ -19,6 +19,7 @@ let lastSpeedIncreaseTime = Date.now();
 let playerName = "匿名";
 let glassChance = 0.7; // 初始玻璃出現機率 70%
 let spawnInterval = null;  // 新增這行
+let pausedAt = null;  // 新增
 const soundHit = new Audio("hit.mp3");
 const soundCrystal = new Audio("crystal.mp3");
 const soundShoot = new Audio("shoot.mp3");
@@ -996,7 +997,7 @@ function togglePause() {
       clearInterval(spawnInterval);
       spawnInterval = null;
     }
-
+    pausedAt = Date.now();               // <<< 新增：記錄暫停時間
     // 顯示暫停圖示
     pauseOverlay = document.createElement("div");
     pauseOverlay.id = "pause-overlay";
@@ -1004,9 +1005,18 @@ function togglePause() {
     document.body.appendChild(pauseOverlay);
 
   } else {
+    if (pausedAt) {
+      const delta = Date.now() - pausedAt;
+      levelStartTime += delta;
+      lastSpeedIncreaseTime += delta;
+      pausedAt = null;
+    }
     // 恢復生成目標
-    if (!spawnInterval) {
-      spawnInterval = setInterval(spawnRandomTarget, 800);
+     if (!spawnInterval) {
+      spawnInterval = setInterval(
+        spawnRandomTarget,
+        LEVELS[currentLevelIndex].spawnIntervalMs
+      );
     }
 
     // 移除 overlay
@@ -1103,7 +1113,7 @@ function startLevelTransition() {
 
   const body = new CANNON.Body({ mass: 0 });
   body.addShape(new CANNON.Box(new CANNON.Vec3(width/2, height/2, thickness/2)));
-  body.position.set(0, 1.5, finalZ);
+  body.position.set(0, 3, finalZ);
   world.addBody(body);
 
   transitionGlass = { mesh: glass, body };
