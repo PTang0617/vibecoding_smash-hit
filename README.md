@@ -1,6 +1,6 @@
-# Smash Hit Web (Vibe Coding Version)
+# Smash Hit Web (Vibe Coding)
 
-## 🎮 Game Overview
+##  Game Overview
 A browser-based 3D shooting game inspired by **Smash Hit**, built with **Three.js** and **Cannon.js**.  
 Shoot glass obstacles, collect crystals to gain extra balls and points, and avoid unbroken glass to survive.
 
@@ -17,7 +17,7 @@ Shoot glass obstacles, collect crystals to gain extra balls and points, and avoi
 
 ---
 
-## 🕹 How to Play
+##  How to Play
 - **Left Click** – Shoot
 - **Spacebar** – Pause / Resume
 - **Collect Crystals** – Gain extra balls or points
@@ -25,7 +25,7 @@ Shoot glass obstacles, collect crystals to gain extra balls and points, and avoi
 
 ---
 
-## 💻 Installation & Run
+##  Installation & Run
 ```bash
 git clone https://github.com/<your-username>/<your-repo>.git
 cd <your-repo>
