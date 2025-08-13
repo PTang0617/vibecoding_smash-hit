@@ -10,28 +10,48 @@
 <body>
   <div id="menu" style="position:absolute;top:0;left:0;width:100%;height:100%;background:#000;display:flex;justify-content:center;align-items:center;z-index:10;">
     <div style="text-align:center; color:white;">
-    <div style="margin-bottom:10px; font-size:20px;">請輸入你的名字：</div>
-    <input id="player-name-input" type="text" placeholder="Your name" style="padding:8px; font-size:18px;" />
-    <div id="name-warning" style="color:red; margin-top:10px;"></div>
-    <br><br>
-    <button id="start-button" style="font-size:24px;padding:12px 24px;">開始遊戲</button>
-  </div>
+      <div style="margin-bottom:10px; font-size:20px;">請輸入你的名字：</div>
+      <input id="player-name-input" type="text" placeholder="Your name" style="padding:8px; font-size:18px;" />
+      <div id="name-warning" style="color:red; margin-top:10px;"></div>
+      <br><br>
+      <button id="start-button" style="font-size:24px;padding:12px 24px;">開始遊戲</button>
+
+      <!-- 玩法介紹：置中、位於開始按鈕正下方 -->
+      <div id="game-instructions">
+        使用滑鼠瞄準並射擊玻璃障礙物，<br>
+        收集水晶可獲得額外球數與分數，<br>
+        請避開未打碎的玻璃以免遊戲結束！
+      </div>
     </div>
+  </div>
+
   <div id="speed-display" style="display:none;"> Speed: 0.0 km/h</div>
   <div id="center-hint">按下空白鍵可暫停</div>
 
   <div id="restart-menu">
-   <div style="color:white; font-size:48px; margin-bottom:24px;">Game Over</div>
-   <button id="restart-button" style="font-size:24px;padding:12px 24px;">重新開始</button>
-  </div>  
+    <div style="color:white; font-size:48px; margin-bottom:24px;">Game Over</div>
+    <button id="restart-button" style="font-size:24px;padding:12px 24px;">重新開始</button>
+  </div>
 
   <button id="mute-button">🔊</button>
 
+  <!-- HUD：移到底部置中，保留原本 ball-count / score id 以便 main.js 更新 -->
   <div id="ui">
-    🎯 Balls: <span id="ball-count">20</span> | 🏆 Score: <span id="score">0</span>
-</div>
+    <div class="hud">
+      <div class="stat">
+        <span class="icon">🎯</span>
+        <span class="label">Balls</span>
+        <span id="ball-count">20</span>
+      </div>
+      <div class="stat">
+        <span class="icon">🏆</span>
+        <span class="label">Score</span>
+        <span id="score">0</span>
+      </div>
+    </div>
   </div>
-  <div style="margin-bottom:10px; font-size:20px;">請輸入你的名字：</div>
+
+  <!-- （原檔有一行重複的「請輸入你的名字」在最外層，建議移除以避免誤顯示）:contentReference[oaicite:3]{index=3} -->
   <div id="leaderboard"></div>
   <canvas id="gameCanvas"></canvas>
 
@@ -47,6 +67,5 @@
 
   <!-- 自己的主程式 -->
   <script src="./main.js"></script>
-
 </body>
 </html>

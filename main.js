@@ -378,7 +378,7 @@ function shoot(event) {
   soundShoot.currentTime = 0;
   soundShoot.play();
   ballCount--;
-  document.getElementById('ball-count').textContent = ballCount;
+  updateBallCount(ballCount);
 }
 
 function showFloatingScore(position3D, text = "+1") {
@@ -704,7 +704,7 @@ function animate() {
 
         const gain = g.isMoving ? 5 : 1;
         score += gain;
-        document.getElementById("score").textContent = score;
+        updateScore(score);
 
         soundHit.currentTime = 0;
         soundHit.play();
@@ -734,10 +734,10 @@ function animate() {
           ballCount += 10;
           score += 1;
           showFloatingScore(c.mesh.position, "+10 Ball +1 Score");
-          document.getElementById("score").textContent = score;
+          updateScore(score);
         }
 
-        document.getElementById("ball-count").textContent = ballCount;
+        updateBallCount(ballCount);
       }
     });
   });
@@ -821,8 +821,8 @@ function resetGame() {
   lastSpeedIncreaseTime = Date.now();
   isGameOver = false;
 
-  document.getElementById("ball-count").textContent = ballCount;
-  document.getElementById("score").textContent = score;
+  updateBallCount(ballCount);
+  updateScore(score);
 
   // 隱藏 restart 畫面
   document.getElementById("restart-menu").style.display = "none";
@@ -1485,4 +1485,30 @@ function slowMo(ms = 200, factor = 0.5) {
   }, ms);
 }
 
+// --- HUD 數值更新＋彈跳動畫 ---
+function updateBallCount(val) {
+  const el = document.getElementById('ball-count');
+  el.textContent = val;
+
+  // HUD 動畫
+  el.classList.remove('bump');
+  void el.offsetWidth;
+  el.classList.add('bump');
+
+  // 球數警告狀態
+  const hud = document.querySelector('#ui .hud');
+  if (val <= 5) {
+    hud.classList.add('low-balls');
+  } else {
+    hud.classList.remove('low-balls');
+  }
+}
+
+function updateScore(val) {
+  const el = document.getElementById('score');
+  el.textContent = val;
+  el.classList.remove('bump');
+  void el.offsetWidth;
+  el.classList.add('bump');
+}
 
