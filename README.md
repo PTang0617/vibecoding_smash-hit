@@ -27,6 +27,6 @@ Shoot glass obstacles, collect crystals to gain extra balls and points, and avoi
 
 ##  Installation & Run
 ```bash
-git clone [https://github.com/<your-username>/<your-repo>.git](https://github.com/PTang0617/vibecoding_smash-hit.git)
+git clonehttps://github.com/PTang0617/vibecoding_smash-hit.git
 cd vibecoding_smash-hit
 # Open index.html in your browser
